@@ -1,6 +1,6 @@
-## My Project
+## Backstage Templates on EKS
 
-This repository contains Backstage templates.
+This repository contains example Backstage templates that are meant to be used on a Amazon EKS cluster.
 
 ## Security
 
