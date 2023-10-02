@@ -1,0 +1,10 @@
+apiVersion: backstage.io/v1alpha1
+kind: Location
+metadata:
+  name: backstage-templates-on-eks
+  description: A public collection of Backstage templates
+spec:
+  targets:
+    - ./data-on-eks/template-data-on-eks.yaml
+    - ./spark/template-job.yaml
+    - ./spark/template-sa.yaml

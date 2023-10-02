@@ -1,0 +1,13 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ${{values.name | dump}}
+  annotations:
+    apache-spark.cnoe-io/label-selector: env=dev,backstage.io/component-id=${{values.name}}
+    apache-spark.cnoe.io/cluster-name: ${{values.clusterName}}
+    backstage.io/kubernetes-namespace: "${{values.namespace}}"
+spec:
+  type: job
+  lifecycle: experimental
+  owner: ${{ values.owner | default('guest')}}

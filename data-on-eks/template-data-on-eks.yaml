@@ -1,0 +1,154 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  description: Creates a EKS cluster with Spark Operator + extra enabled through Terraform
+  name: data-on-eks-spark
+  title: Data on EKS - Spark Operator
+spec:
+  owner: guest
+  type: service
+  parameters:
+    - title: Terraform config options
+      properties:
+        tfVars:
+          properties:
+            eks_cluster_version:
+              default: "1.26"
+              description: EKS Cluster version
+              type: string
+            eks_data_plane_subnet_secondary_cidr:
+              default:
+                - 100.64.0.0/17
+                - 100.64.128.0/17
+              description: Secondary CIDR blocks. 32766 IPs per Subnet per Subnet/AZ for EKS Node and Pods
+              items:
+                type: string
+              type: array
+            enable_amazon_prometheus:
+              default: true
+              description: Enable AWS Managed Prometheus service
+              type: boolean
+            enable_vpc_endpoints:
+              default: false
+              description: Enable VPC Endpoints
+              type: boolean
+            enable_yunikorn:
+              default: true
+              description: Enable Apache YuniKorn Scheduler
+              type: boolean
+            name:
+              default: spark-operator-doeks
+              description: Name of the VPC and EKS Cluster
+              type: string
+            private_subnets:
+              default:
+                - 10.1.1.0/24
+                - 10.1.2.0/24
+              description: Private Subnets CIDRs. 254 IPs per Subnet/AZ for Private NAT + NLB + Airflow + EC2 Jumphost etc.
+              items:
+                type: string
+              type: array
+            public_subnets:
+              default:
+                - 10.1.0.0/26
+                - 10.1.0.64/26
+              description: Public Subnets CIDRs. 62 IPs per Subnet/AZ
+              items:
+                type: string
+              type: array
+            region:
+              default: us-west-2
+              description: Region
+              type: string
+            secondary_cidr_blocks:
+              default:
+                - 100.64.0.0/16
+              description: Secondary CIDR blocks to be attached to VPC
+              items:
+                type: string
+              type: array
+            vpc_cidr:
+              default: 10.1.0.0/16
+              description: VPC CIDR. This should be a valid private (RFC 1918) CIDR range
+              type: string
+          title: Terraform variables
+          type: object
+    - title: Configuration Options
+      properties:
+        name:
+          title: name of this entry
+          type: string
+        namespace:
+          title: namespace within the kubernetes cluster to deploy this
+          type: string
+          default: data-on-eks
+        adminRoleName:
+          title: Admin Role Name
+          description: Name of the role to give the administrative rights on the EKS cluster.
+          default: Admin
+          type: string
+        clusterName:
+          title: Cluster to run
+          description: The cluster to run this workflow in. 
+          type: string
+          ui:field: KubernetesClusterPicker
+        repoUrl:
+          title: Repository Location
+          type: string
+          ui:field: RepoUrlPicker
+          ui:options:
+            allowedHosts:
+              - github.com
+  steps:
+    - id: create-repo
+      name: Create Repository
+      action: github:repo:create
+      input:
+        repoUrl: ${{ parameters.repoUrl }}
+    - id: fetch-base
+      name: Fetch Base
+      action: fetch:template
+      input:
+        url: ./templates-spark/
+        values:
+          name: ${{ parameters.name }}
+          namespace: ${{ parameters.namespace }}
+          tfVars: ${{ parameters.tfVars }}
+          adminRoleName: ${{parameters.adminRoleName}}
+          clusterName: ${{ parameters.clusterName }}
+    - id: init-repo
+      name: Initialize Repository
+      action: github:repo:push
+      input:
+        repoUrl: ${{ parameters.repoUrl }}
+        defaultBranch: main
+    - id: wait
+      name: Waiting for the repo to be ready
+      action: "roadiehq:utils:sleep"
+      input:
+        amount: 5
+    - id: register
+      name: Register
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps['init-repo'].output.repoContentsUrl }}
+        catalogInfoPath: '/catalog-info.yaml'
+    - id: apply-cm
+      name: Apply TF variables CM
+      action: cnoe:kubernetes:apply
+      input:
+        manifestPath: cm.yaml
+        namespaced: true
+        clusterName: ${{ parameters.clusterName }}
+    - id: apply-workflow
+      name: Start TF workflow
+      action: cnoe:kubernetes:apply
+      input:
+        manifestPath: workflow.yaml
+        namespaced: true
+        clusterName: ${{ parameters.clusterName }}
+  output:
+    links:
+      - title: Open in catalog
+        icon: catalog
+        entityRef: ${{ steps['register'].output.entityRef }}

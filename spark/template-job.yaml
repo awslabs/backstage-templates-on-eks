@@ -1,0 +1,141 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: apache-spark-job
+  title: Submit an Apache Spark Application
+  description: Creates an Apache Spark Application
+spec:
+  owner: guest
+  type: job
+  parameters:
+    - title: Configuration Options
+      required:
+        - name
+        - repoUrl
+      properties:
+        name:
+          title: Application Name
+          type: string
+          description: Unique name of the component
+          ui:autofocus: true
+          ui:options:
+            rows: 5
+        namespace:
+          title: Namespace
+          type: string
+          default: default
+          description: Namespace to deploy this application into. Optional. Defaults to application name.
+          ui:options:
+            rows: 5
+        clusterName:
+          title: Cluster to run
+          description: The cluster to run this job in. 
+          type: string
+          ui:field: KubernetesClusterPicker
+        repoUrl:
+          title: Repository Location
+          type: string
+          ui:field: RepoUrlPicker
+          ui:options:
+            allowedHosts:
+              - github.com
+    - title: Paste your Spark manifest
+      required:
+        - manifest
+      properties:
+        manifest:
+          type: string
+          description: 'Paste your Spark Application manifest here'
+          "ui:widget": "textarea"
+          "ui:options": {
+            "inputType": "data",
+            "rows": 15
+          }
+          ui:autofocus: true
+          "ui:placeholder": |
+            apiVersion: "sparkoperator.k8s.io/v1beta2"
+            kind: SparkApplication
+            metadata:
+              name:
+            spec:...
+  steps:
+    - id: fetch-base
+      name: Fetch Base
+      action: fetch:template
+      input:
+        url: ./templates-job/
+        values:
+          name: ${{ parameters.name }}
+          namespace: ${{ parameters.namespace }}
+          clusterName: ${{ parameters.clusterName }}
+    # convert yaml to json to use with the merge action
+    - id: write
+      name: write-to-file
+      action: roadiehq:utils:fs:write
+      input:
+        path: input.yaml
+        content: ${{ parameters.manifest }}
+    - id: parse
+      name: parse-input
+      action: roadiehq:utils:fs:parse
+      input:
+        path: input.yaml
+        parser: yaml
+    - id: serialize
+      name: serialize
+      action: roadiehq:utils:serialize:json
+      input:
+        data: ${{ steps.parse.output.content }}
+    - id: writeJson
+      name: write-to-file
+      action: roadiehq:utils:fs:write
+      input:
+        path: input.json
+        content: ${{ steps.serialize.output.serialized }}
+    # once converted, merge with required information from merge.json
+    - id: parseMerge
+      name: parse-merge
+      action: roadiehq:utils:fs:parse
+      input:
+        path: merge.json
+        parser: json
+    - id: merge
+      name: Merge
+      action: roadiehq:utils:json:merge
+      input:
+        path: input.json
+        content: ${{ steps.parseMerge.output.content }}
+    - id: apply
+      name: apply manifest
+      action: cnoe:kubernetes:apply
+      input:
+        manifestPath: input.json
+        namespaced: true
+        clusterName: ${{ parameters.clusterName }}
+    - id: create-repo
+      name: Create Repository
+      action: github:repo:create
+      input:
+        repoUrl: ${{ parameters.repoUrl }}
+    - id: init-repo
+      name: Initialize Repository
+      action: github:repo:push
+      input:
+        repoUrl: ${{ parameters.repoUrl }}
+        defaultBranch: main
+    - id: wait
+      name: Waiting for the repo to be ready
+      action: "roadiehq:utils:sleep"
+      input:
+        amount: 5
+    - id: register
+      name: Register
+      action: catalog:register
+      input:
+        catalogInfoPath: '/catalog-info.yaml'
+        repoContentsUrl: ${{ steps['init-repo'].output.repoContentsUrl }}
+  output:
+    links:
+      - title: Open in catalog
+        icon: catalog
+        entityRef: ${{ steps['register'].output.entityRef }}

@@ -1,0 +1,14 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: eks-cluster-${{values.name}}
+  description: kubernetes cluster for ${{ values.name }}
+  annotations:
+    backstage.io/kubernetes-namespace: ${{values.namespace}}
+    argo-workflows.cnoe.io/label-selector: env=dev,backstage-id=eks-cluster-${{values.name}}
+    argo-workflows.cnoe.io/cluster-name: ${{values.clusterName}}
+spec:
+  type: kubernetes-cluster
+  lifecycle: experimental
+  owner: guest
+  system: ${{values.name | dump}}

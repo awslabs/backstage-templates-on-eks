@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: data-on-eks-
+  namespace: ${{values.namespace}}
+  labels:
+    backstage-id: eks-cluster-${{values.name}}
+    env: dev
+spec:
+  arguments:
+    parameters:
+      - name: backstage-entity-name
+        value: eks-cluster-${{values.name}}
+      - name: script-location
+        value: analytics/terraform/spark-k8s-operator
+      - name: admin-role
+        value: ${{values.adminRoleName}}
+  workflowTemplateRef:
+    name: terraform-data-on-eks
+    clusterScope: true
