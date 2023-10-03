@@ -1,0 +1,135 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  description: Adds a Go application with AWS resources
+  name: app-with-aws-resources
+  title: Add a Go App with AWS resources
+spec:
+  owner: guest
+  parameters:
+    - properties:
+        name:
+          title: Application Name
+          type: string
+          description: Unique name of the component
+          ui:autofocus: true
+        owner:
+          title: Owner
+          type: string
+          default: guest
+          description: Owner of the component
+          ui:field: OwnerPicker
+          ui:options:
+            catalogFilter:
+              kind: Group
+        labels:
+          title: Labels
+          type: object
+          additionalProperties:
+            type: string
+          description: Labels to apply to the application
+          ui:autofocus: true
+        repoUrl:
+          title: Repository Location
+          type: string
+          ui:field: RepoUrlPicker
+          ui:options:
+            allowedHosts:
+              - github.com
+            # allowedOwners:
+            #   - myorg
+      required:
+        - repoUrl
+      title: Choose your repository location
+    - dependencies:
+        resources:
+          oneOf:
+            - $yaml: resources/awsblueprints.io.subscriptionfilter.yaml
+            - $yaml: resources/awsblueprints.io.eventsourcemapping.yaml
+            - $yaml: resources/awsblueprints.io.iampolicy.yaml
+            - $yaml: resources/awsblueprints.io.irsa.yaml
+            - $yaml: resources/awsblueprints.io.xkinesisfirehose.yaml
+            - $yaml: resources/awsblueprints.io.firehoseapp.yaml
+            - $yaml: resources/awsblueprints.io.encryptionkey.yaml
+            - $yaml: resources/awsblueprints.io.lambdafunction.yaml
+            - $yaml: resources/awsblueprints.io.objectstorage.yaml
+            - $yaml: resources/awsblueprints.io.serverlessapp.yaml
+            - $yaml: resources/awsblueprints.io.notification.yaml
+            - $yaml: resources/awsblueprints.io.fanout.yaml
+            - $yaml: resources/awsblueprints.io.queue.yaml
+      description: Select a AWS resource to add to your repository.
+      properties:
+        name:
+          description: name of this resource. This will be the name of K8s object.
+          type: string
+        resources:
+          enum:
+            - awsblueprints.io.subscriptionfilter
+            - awsblueprints.io.eventsourcemapping
+            - awsblueprints.io.iampolicy
+            - awsblueprints.io.irsa
+            - awsblueprints.io.xkinesisfirehose
+            - awsblueprints.io.firehoseapp
+            - awsblueprints.io.encryptionkey
+            - awsblueprints.io.lambdafunction
+            - awsblueprints.io.objectstorage
+            - awsblueprints.io.serverlessapp
+            - awsblueprints.io.notification
+            - awsblueprints.io.fanout
+            - awsblueprints.io.queue
+          type: string
+      required:
+        - resources
+        - name
+      title: Choose AWS Resources
+  steps:
+    - id: create-repo
+      name: Create Repository
+      action: github:repo:create
+      input:
+        repoUrl: ${{ parameters.repoUrl }}
+    - id: fetch-base
+      name: Fetch Base
+      action: fetch:template
+      input:
+        url: ./templates
+        values:
+          name: ${{ parameters.name }}
+          labels: ${{ parameters.labels }}
+          repoUrl: ${{ parameters.repoUrl }}
+          owner: ${{ parameters.owner }}
+          remoteUrl: ${{ steps['create-repo'].output.remoteUrl }}
+    - action: roadiehq:utils:serialize:yaml
+      id: serialize
+      input:
+        data:
+          apiVersion: awsblueprints.io/v1alpha1
+          kind: ${{ parameters.kind }}
+          metadata:
+            name: ${{ parameters.name }}
+          spec: ${{ parameters.config }}
+      name: serialize
+    - action: roadiehq:utils:fs:write
+      id: write
+      input:
+        content: ${{ steps['serialize'].output.serialized }}
+        path: kustomize/base/${{ parameters.name }}.yaml
+      name: write-to-file
+    - id: init-repo
+      name: Initialize Repository
+      action: github:repo:push
+      input:
+        repoUrl: ${{ parameters.repoUrl }}
+        defaultBranch: main
+    - id: wait
+      name: Waiting for the repo to be ready
+      action: "roadiehq:utils:sleep"
+      input:
+        amount: 5
+    - id: register
+      name: Register
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps['init-repo'].output.repoContentsUrl }}
+        catalogInfoPath: '/catalog-info.yaml'
+  type: service

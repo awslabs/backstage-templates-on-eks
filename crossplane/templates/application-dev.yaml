@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ${{ values.name }}
+  namespace: argocd
+  labels:
+    created-by: backstage
+  {%- for key, val in values.labels %}
+    ${{ key}}: ${{ val }}
+  {%- endfor %}
+spec:
+  project: default
+  source:
+    repoURL: ${{ values.repoUrl }}
+    targetRevision: HEAD
+    path: kustomize/dev/
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: {}
+    syncOptions:
+      - CreateNamespace=true
