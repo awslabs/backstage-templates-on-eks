@@ -8,3 +8,4 @@ spec:
     - ./data-on-eks/template-data-on-eks.yaml
     - ./spark/template-job.yaml
     - ./spark/template-sa.yaml
+    - ./crossplane/template.yaml
